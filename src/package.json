@@ -7,7 +7,7 @@
   "description": "The easiest way to run WireGuard VPN + Web-based Admin UI.",
   "main": "server.js",
   "scripts": {
-    "serve": "DEBUG=Server,WireGuard npx nodemon server.js",
+    "serve": "DEBUG=Server WG_DEFAULT_ADDRESS=192.168.103.128/25 WG_HOST=10.0.0.2,WireGuard npx nodemon server.js ",
     "serve-with-password": "PASSWORD=wg npm run serve",
     "lint": "eslint .",
     "buildcss": "npx tailwindcss -i ./www/src/css/app.css -o ./www/css/app.css"
@@ -21,6 +21,7 @@
     "debug": "^4.3.7",
     "express-session": "^1.18.0",
     "h3": "^1.12.0",
+    "ip": "^2.0.1",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

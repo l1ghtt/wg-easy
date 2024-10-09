@@ -6,6 +6,7 @@ const debug = require('debug')('WireGuard');
 const crypto = require('node:crypto');
 const QRCode = require('qrcode');
 const CRC32 = require('crc-32');
+const ip = require('ip');
 
 const Util = require('./Util');
 const ServerError = require('./ServerError');
@@ -47,13 +48,13 @@ module.exports = class WireGuard {
         const publicKey = await Util.exec(`echo ${privateKey} | wg pubkey`, {
           log: 'echo ***hidden*** | wg pubkey',
         });
-        const address = WG_DEFAULT_ADDRESS.replace('x', '1');
-
+        const cidr = ip.cidrSubnet(WG_DEFAULT_ADDRESS);
+        const firstAddress = cidr.firstAddress;
         config = {
           server: {
             privateKey,
             publicKey,
-            address,
+            firstAddress,
           },
           clients: {},
         };
@@ -103,7 +104,7 @@ module.exports = class WireGuard {
 # Server
 [Interface]
 PrivateKey = ${config.server.privateKey}
-Address = ${config.server.address}/24
+Address = ${config.server.address}
 ListenPort = ${WG_PORT}
 PreUp = ${WG_PRE_UP}
 PostUp = ${WG_POST_UP}
@@ -215,7 +216,7 @@ ${client.preSharedKey ? `PresharedKey = ${client.preSharedKey}\n` : ''
     return `
 [Interface]
 PrivateKey = ${client.privateKey ? `${client.privateKey}` : 'REPLACE_ME'}
-Address = ${client.address}/24
+Address = ${client.address}
 ${WG_DEFAULT_DNS ? `DNS = ${WG_DEFAULT_DNS}\n` : ''}\
 ${WG_MTU ? `MTU = ${WG_MTU}\n` : ''}\
 
@@ -249,14 +250,20 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
     const preSharedKey = await Util.exec('wg genpsk');
 
     // Calculate next IP
+    const cidr = ip.cidrSubnet(WG_DEFAULT_ADDRESS);
     let address;
-    for (let i = 2; i < 255; i++) {
-      const client = Object.values(config.clients).find((client) => {
-        return client.address === WG_DEFAULT_ADDRESS.replace('x', i);
+    for (
+      let i = ip.toLong(cidr.firstAddress) + 1;
+      i <= ip.toLong(cidr.lastAddress) - 1;
+      i++
+    ) {
+      const currentIp = ip.fromLong(i);
+      const client = Object.values(clients).find((client) => {
+        return client.address === currentIp;
       });
 
       if (!client) {
-        address = WG_DEFAULT_ADDRESS.replace('x', i);
+        address = currentIp;
         break;
       }
     }
@@ -348,7 +355,7 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
   async updateClientAddress({ clientId, address }) {
     const client = await this.getClient({ clientId });
 
-    if (!Util.isValidIPv4(address)) {
+    if (!ip.isV4Format(address)) {
       throw new ServerError(`Invalid Address: ${address}`, 400);
     }
 
